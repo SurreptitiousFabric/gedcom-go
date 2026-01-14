@@ -1,12 +1,12 @@
 # gedcom-go
 
-[![CI](https://github.com/cacack/gedcom-go/actions/workflows/ci.yml/badge.svg)](https://github.com/cacack/gedcom-go/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/cacack/gedcom-go/graph/badge.svg)](https://codecov.io/gh/cacack/gedcom-go)
-[![Go Report Card](https://goreportcard.com/badge/github.com/cacack/gedcom-go)](https://goreportcard.com/report/github.com/cacack/gedcom-go)
-[![GoDoc](https://pkg.go.dev/badge/github.com/cacack/gedcom-go.svg)](https://pkg.go.dev/github.com/cacack/gedcom-go)
-[![Release](https://img.shields.io/github/v/release/cacack/gedcom-go)](https://github.com/cacack/gedcom-go/releases)
+[![CI](https://github.com/SurreptitiousFabric/gedcom-go/actions/workflows/ci.yml/badge.svg)](https://github.com/SurreptitiousFabric/gedcom-go/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/SurreptitiousFabric/gedcom-go/graph/badge.svg)](https://codecov.io/gh/SurreptitiousFabric/gedcom-go)
+[![Go Report Card](https://goreportcard.com/badge/github.com/SurreptitiousFabric/gedcom-go)](https://goreportcard.com/report/github.com/SurreptitiousFabric/gedcom-go)
+[![GoDoc](https://pkg.go.dev/badge/github.com/SurreptitiousFabric/gedcom-go.svg)](https://pkg.go.dev/github.com/SurreptitiousFabric/gedcom-go)
+[![Release](https://img.shields.io/github/v/release/SurreptitiousFabric/gedcom-go)](https://github.com/SurreptitiousFabric/gedcom-go/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Go Version](https://img.shields.io/github/go-mod/go-version/cacack/gedcom-go)](https://github.com/cacack/gedcom-go)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/SurreptitiousFabric/gedcom-go)](https://github.com/SurreptitiousFabric/gedcom-go)
 
 A pure Go library for parsing and validating GEDCOM (GEnealogical Data COMmunication) files.
 
@@ -50,7 +50,7 @@ See [FEATURES.md](FEATURES.md) for the complete feature list including all suppo
 ## Installation
 
 ```bash
-go get github.com/cacack/gedcom-go
+go get github.com/SurreptitiousFabric/gedcom-go
 ```
 
 ## Requirements
@@ -69,7 +69,7 @@ import (
     "log"
     "os"
 
-    "github.com/cacack/gedcom-go/decoder"
+    "github.com/SurreptitiousFabric/gedcom-go/decoder"
 )
 
 func main() {
@@ -132,7 +132,7 @@ if family != nil {
 ### Validating GEDCOM Files
 
 ```go
-import "github.com/cacack/gedcom-go/validator"
+import "github.com/SurreptitiousFabric/gedcom-go/validator"
 
 // Validate the document
 v := validator.New(doc)
@@ -149,7 +149,7 @@ if len(errors) > 0 {
 ### Creating GEDCOM Files
 
 ```go
-import "github.com/cacack/gedcom-go/encoder"
+import "github.com/SurreptitiousFabric/gedcom-go/encoder"
 
 // Create a new document
 doc := &gedcom.Document{
@@ -177,7 +177,7 @@ encoder.Encode(f, doc)
   - [`examples/encode`](examples/encode) - Creating GEDCOM files programmatically
   - [`examples/query`](examples/query) - Navigating and querying genealogy data
   - [`examples/validate`](examples/validate) - Validating GEDCOM files
-- **API Documentation**: [pkg.go.dev/github.com/cacack/gedcom-go](https://pkg.go.dev/github.com/cacack/gedcom-go)
+- **API Documentation**: [pkg.go.dev/github.com/SurreptitiousFabric/gedcom-go](https://pkg.go.dev/github.com/SurreptitiousFabric/gedcom-go)
 - **Contributing**: [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## Packages

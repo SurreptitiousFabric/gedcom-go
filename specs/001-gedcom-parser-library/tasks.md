@@ -122,7 +122,7 @@
 - [ ] T055 [US1] Run all tests: `go test ./parser ./version ./decoder -v`
 - [ ] T056 [US1] Verify test coverage ≥85%: `go test ./parser ./version ./decoder -cover`
 - [ ] T057 [US1] Run benchmarks and verify performance targets: `go test ./decoder -bench=. -benchmem`
-- [ ] T058 [US1] Parse all sample files in `testdata/` and verify success
+- [X] T058 [US1] Parse all sample files in `testdata/` and verify success
 - [ ] T059 [US1] Verify SC-001: Can parse file in <5 lines of code (create simple test program)
 - [ ] T060 [US1] Verify SC-002: ≥10,000 records/second parsing rate
 - [ ] T061 [US1] Verify SC-008: 10MB file parses in <2 seconds
@@ -139,21 +139,21 @@
 
 ### Tests for User Story 2 (TDD Approach - Write First)
 
-- [ ] T062 [P] [US2] Write tests for invalid tag errors in `parser/parser_test.go` (expect "Invalid tag 'XYZ' at line 45")
-- [ ] T063 [P] [US2] Write tests for hierarchy level errors in `parser/parser_test.go` (mismatched nesting)
+- [X] T062 [P] [US2] Write tests for invalid tag errors in `parser/parser_test.go` (expect "Invalid tag 'XYZ' at line 45")
+- [X] T063 [P] [US2] Write tests for hierarchy level errors in `parser/parser_test.go` (mismatched nesting)
 - [ ] T064 [P] [US2] Write tests for missing cross-reference targets in `decoder/decoder_test.go` (broken XRef)
-- [ ] T065 [P] [US2] Write tests for encoding errors in `charset/charset_test.go` (invalid UTF-8 sequences)
-- [ ] T066 [P] [US2] Write tests for malformed files in `testdata/malformed/` directory
+- [X] T065 [P] [US2] Write tests for encoding errors in `charset/charset_test.go` (invalid UTF-8 sequences)
+- [X] T066 [P] [US2] Write tests for malformed files in `testdata/malformed/` directory
 - [ ] T067 [P] [US2] Write tests for partial file recovery (error recovery mode) in `decoder/decoder_test.go`
 
 ### Implementation for User Story 2
 
 - [ ] T068 [P] [US2] Enhance ParseError with context snippet in `parser/errors.go` (show surrounding lines)
 - [ ] T069 [P] [US2] Add structured error types for common issues in `parser/errors.go` (InvalidTagError, LevelMismatchError, etc.)
-- [ ] T070 [US2] Implement graceful error handling in parser (no panics, return errors per FR-015) in `parser/parser.go`
+- [X] T070 [US2] Implement graceful error handling in parser (no panics, return errors per FR-015) in `parser/parser.go`
 - [ ] T071 [US2] Add error recovery mode to decoder in `decoder/decoder.go` (continue parsing after errors, collect all errors)
 - [ ] T072 [US2] Implement broken XRef detection in `decoder/decoder.go` (check XRefMap for dangling references)
-- [ ] T073 [US2] Add encoding error detection and reporting in `charset/charset.go`
+- [X] T073 [US2] Add encoding error detection and reporting in `charset/charset.go`
 - [ ] T074 [US2] Enhance error messages with suggestions in `parser/errors.go` (e.g., "expected INDI, FAM, or SOUR")
 
 ### Verification for User Story 2
@@ -176,22 +176,22 @@
 
 ### Tests for User Story 3 (TDD Approach - Write First)
 
-- [ ] T080 [P] [US3] Write tests for missing required fields in `validator/validator_test.go` (Individual without NAME)
+- [X] T080 [P] [US3] Write tests for missing required fields in `validator/validator_test.go` (Individual without NAME)
 - [ ] T081 [P] [US3] Write tests for invalid date formats in `validator/validator_test.go` ("32 JAN 2020")
-- [ ] T082 [P] [US3] Write tests for broken cross-references in `validator/validator_test.go`
+- [X] T082 [P] [US3] Write tests for broken cross-references in `validator/validator_test.go`
 - [ ] T083 [P] [US3] Write tests for circular family relationships in `validator/validator_test.go`
 - [ ] T084 [P] [US3] Write tests for non-standard XRef format warnings in `validator/validator_test.go` (@I-001@ triggers warning)
 - [ ] T085 [P] [US3] Write tests for version-specific validation in `validator/validator_test.go` (7.0 using 5.5 deprecated tags)
-- [ ] T086 [P] [US3] Write tests for valid GEDCOM structures (no errors) in `validator/validator_test.go`
+- [X] T086 [P] [US3] Write tests for valid GEDCOM structures (no errors) in `validator/validator_test.go`
 
 ### Implementation for User Story 3
 
-- [ ] T087 [P] [US3] Create ValidationError type with line numbers in `validator/errors.go`
-- [ ] T088 [P] [US3] Define validation error codes in `validator/errors.go` (MISSING_REQUIRED_FIELD, INVALID_DATE, BROKEN_XREF, CIRCULAR_REFERENCE)
+- [X] T087 [P] [US3] Create ValidationError type with line numbers in `validator/errors.go`
+- [X] T088 [P] [US3] Define validation error codes in `validator/errors.go` (MISSING_REQUIRED_FIELD, INVALID_DATE, BROKEN_XREF, CIRCULAR_REFERENCE)
 - [ ] T089 [US3] Create Validator interface in `validator/validator.go` with Validate(doc *Document) method
-- [ ] T090 [US3] Implement required field validation in `validator/rules.go` (check NAME for Individual, etc.)
+- [X] T090 [US3] Implement required field validation in `validator/rules.go` (check NAME for Individual, etc.)
 - [ ] T091 [US3] Implement date format validation in `validator/rules.go` (check day/month/year validity per FR-010)
-- [ ] T092 [US3] Implement cross-reference validation in `validator/rules.go` (all XRefs resolve via XRefMap)
+- [X] T092 [US3] Implement cross-reference validation in `validator/rules.go` (all XRefs resolve via XRefMap)
 - [ ] T093 [US3] Implement circular relationship detection in `validator/rules.go` (person as own ancestor)
 - [ ] T094 [US3] Implement non-standard XRef format warnings in `validator/rules.go` (per FR-022)
 - [ ] T095 [P] [US3] Create GEDCOM 5.5 validation rules in `validator/v55_rules.go`
@@ -219,19 +219,19 @@
 
 ### Tests for Encoding (TDD Approach - Write First)
 
-- [ ] T104 [P] Write tests for encoding all record types in `encoder/encoder_test.go`
-- [ ] T105 [P] Write roundtrip tests (parse → encode → parse → compare) in `encoder/encoder_test.go`
-- [ ] T106 [P] Write tests for line ending formats (CRLF, LF) in `encoder/encoder_test.go`
-- [ ] T107 [P] Write tests for character encoding (UTF-8) in `encoder/encoder_test.go`
+- [X] T104 [P] Write tests for encoding all record types in `encoder/encoder_test.go`
+- [X] T105 [P] Write roundtrip tests (parse → encode → parse → compare) in `encoder/encoder_test.go`
+- [X] T106 [P] Write tests for line ending formats (CRLF, LF) in `encoder/encoder_test.go`
+- [X] T107 [P] Write tests for character encoding (UTF-8) in `encoder/encoder_test.go`
 
 ### Implementation for Encoding
 
 - [ ] T108 [P] Create EncodeOptions struct in `encoder/options.go` with LineEnding, Encoding options
 - [ ] T109 Create Encoder interface in `encoder/encoder.go` with Encode(w io.Writer, doc *Document) method
-- [ ] T110 Implement Encoder.Encode() in `encoder/encoder.go` (write Header, Records, Trailer)
-- [ ] T111 Implement tag formatting in `encoder/encoder.go` (level, tag, value, line endings per FR-018)
-- [ ] T112 Implement cross-reference formatting in `encoder/encoder.go` (@XREF@ format)
-- [ ] T113 Add UTF-8 encoding support in `encoder/encoder.go`
+- [X] T110 Implement Encoder.Encode() in `encoder/encoder.go` (write Header, Records, Trailer)
+- [X] T111 Implement tag formatting in `encoder/encoder.go` (level, tag, value, line endings per FR-018)
+- [X] T112 Implement cross-reference formatting in `encoder/encoder.go` (@XREF@ format)
+- [X] T113 Add UTF-8 encoding support in `encoder/encoder.go`
 
 ### Verification for Encoding
 
@@ -248,16 +248,16 @@
 
 **Purpose**: Demonstrate library usage and complete documentation
 
-- [ ] T118 [P] Create basic parsing example in `examples/parse/main.go` (read file, print record count)
+- [X] T118 [P] Create basic parsing example in `examples/parse/main.go` (read file, print record count)
 - [ ] T119 [P] Create streaming example in `examples/stream/main.go` (process large file with callback)
-- [ ] T120 [P] Create validation example in `examples/validate/main.go` (validate and report errors)
-- [ ] T121 [P] Add package-level godoc to all packages (parser, decoder, encoder, validator, etc.)
+- [X] T120 [P] Create validation example in `examples/validate/main.go` (validate and report errors)
+- [X] T121 [P] Add package-level godoc to all packages (parser, decoder, encoder, validator, etc.)
 - [ ] T122 [P] Add godoc comments to all exported types and functions
 - [ ] T123 [P] Add godoc examples for key functions (Decode, Validate, Encode)
-- [ ] T124 Update README.md with installation, quick start, and feature overview
-- [ ] T125 Update README.md with links to examples and documentation
-- [ ] T126 [P] Add CONTRIBUTING.md with development setup and testing instructions
-- [ ] T127 Update CHANGELOG.md with initial v0.1.0 release notes
+- [X] T124 Update README.md with installation, quick start, and feature overview
+- [X] T125 Update README.md with links to examples and documentation
+- [X] T126 [P] Add CONTRIBUTING.md with development setup and testing instructions
+- [X] T127 Update CHANGELOG.md with initial v0.1.0 release notes
 
 **Checkpoint**: Documentation complete - library is ready for external use
 
