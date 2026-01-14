@@ -10,6 +10,32 @@
 
 A pure Go library for parsing and validating GEDCOM (GEnealogical Data COMmunication) files.
 
+## Fork Notice
+
+This repository is a fork of cacack/gedcom-go.
+
+The purpose of this fork is to provide a stable, ingestion-focused GEDCOM parsing library for downstream tools that need to reliably read GEDCOM data and transform it into other structured formats.
+
+### Scope and intent
+
+This fork prioritizes robust parsing, validation, and predictable behavior over full round-trip fidelity.
+
+It is intended primarily for one-way ingestion workflows (GEDCOM -> normalized internal representations).
+
+Compatibility with upstream APIs is not guaranteed.
+
+Changes are made conservatively, with an emphasis on correctness and long-term stability.
+
+### Contributions
+
+Bug fixes and narrowly scoped improvements may be accepted.
+
+Large refactors, API redesigns, or changes aimed at expanding GEDCOM write/export capabilities are unlikely to be accepted.
+
+This fork does not aim to replace or compete with the upstream project.
+
+For a general-purpose GEDCOM library with broader scope, please refer to the upstream repository.
+
 ## Features
 
 - **Multi-version Support**: Parse GEDCOM 5.5, 5.5.1, and 7.0 files

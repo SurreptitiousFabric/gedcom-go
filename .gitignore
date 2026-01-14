@@ -32,6 +32,7 @@ go.work.sum
 
 # Dependency directories
 vendor/
+.tools/
 
 # IDE and editor files
 .vscode/

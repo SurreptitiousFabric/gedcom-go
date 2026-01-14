@@ -1,7 +1,7 @@
 # Makefile for gedcom-go
 # Go genealogy library for parsing and validating GEDCOM files
 
-.PHONY: help test test-verbose test-coverage test-short bench bench-save bench-compare perf-regression fmt vet lint clean coverage-html install-tools build tidy check check-coverage all setup-hooks setup-dev-env
+.PHONY: help test test-verbose test-coverage test-short bench bench-save bench-compare perf-regression fmt vet lint install-staticcheck arch clean coverage coverage-html install-tools build tidy check check-coverage all setup-hooks setup-dev-env
 
 # Default target
 .DEFAULT_GOAL := help
@@ -15,6 +15,11 @@ GOGET=$(GOCMD) get
 GOMOD=$(GOCMD) mod
 GOFMT=$(GOCMD) fmt
 GOVET=$(GOCMD) vet
+
+# Tooling (local installs)
+TOOLS_DIR := $(CURDIR)/.tools
+TOOLS_BIN := $(TOOLS_DIR)/bin
+STATICCHECK := $(TOOLS_BIN)/staticcheck
 
 # Coverage parameters
 COVERAGE_FILE=coverage.out
@@ -61,6 +66,8 @@ test-coverage: ## Run tests with coverage report
 	else \
 		echo "✓ Coverage ($$COVERAGE%) meets target ($(COVERAGE_TARGET)%)"; \
 	fi
+
+coverage: test-coverage ## Run tests with coverage report (alias)
 
 coverage-html: test-coverage ## Generate HTML coverage report
 	@echo "Generating HTML coverage report..."
@@ -113,9 +120,17 @@ vet: ## Run go vet
 
 lint: install-staticcheck ## Run staticcheck linter
 	@echo "Running staticcheck..."
-	@which staticcheck > /dev/null || (echo "staticcheck not found. Run 'make install-tools'" && exit 1)
-	staticcheck ./...
+	@$(STATICCHECK) ./...
 	@echo "✓ No issues found"
+
+install-staticcheck: ## Install staticcheck locally
+	@echo "Installing staticcheck..."
+	@mkdir -p $(TOOLS_BIN)
+	@GOBIN=$(TOOLS_BIN) $(GOCMD) install honnef.co/go/tools/cmd/staticcheck@$(STATICCHECK_VERSION)
+	@echo "staticcheck installed"
+
+arch: ## Run architecture checks (none configured)
+	@echo "Arch checks: none configured"
 
 check: fmt vet test ## Run all checks (format, vet, test)
 	@echo "✓ All checks passed"
