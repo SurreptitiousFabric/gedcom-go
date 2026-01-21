@@ -116,6 +116,11 @@ type ValidatorConfig struct {
 	Strictness Strictness
 }
 
+// ValidatorInterface defines the minimal validation API.
+type ValidatorInterface interface {
+	Validate(doc *gedcom.Document) []error
+}
+
 // Validator validates GEDCOM documents against specification rules.
 type Validator struct {
 	errors     []error
@@ -196,6 +201,10 @@ func (v *Validator) getQualityAnalyzer() *QualityAnalyzer {
 
 // Validate validates a GEDCOM document and returns any validation errors.
 func (v *Validator) Validate(doc *gedcom.Document) []error {
+	if doc == nil {
+		return nil
+	}
+
 	v.errors = make([]error, 0)
 
 	// Validate cross-references
@@ -203,6 +212,18 @@ func (v *Validator) Validate(doc *gedcom.Document) []error {
 
 	// Validate records
 	v.validateRecords(doc)
+
+	// Validate date formats
+	v.validateDates(doc)
+
+	// Validate XRef formats
+	v.validateXRefFormats(doc)
+
+	// Validate circular relationships
+	v.validateCircularRelationships(doc)
+
+	// Validate version-specific rules
+	v.validateVersionSpecific(doc)
 
 	return v.errors
 }

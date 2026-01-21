@@ -56,10 +56,19 @@ func DecodeWithOptions(r io.Reader, opts *DecodeOptions) (*gedcom.Document, erro
 
 	// Parse all lines
 	p := parser.NewParser()
-	lines, err := p.Parse(validatedReader)
-	if err != nil {
-		// Preserve charset errors in the error message
-		return nil, err
+	var (
+		lines     []*parser.Line
+		err       error
+		parseErrs []error
+	)
+	if opts.RecoverErrors {
+		lines, parseErrs = p.ParseWithRecovery(validatedReader)
+	} else {
+		lines, err = p.Parse(validatedReader)
+		if err != nil {
+			// Preserve charset errors in the error message
+			return nil, err
+		}
 	}
 
 	// Check context after parsing
@@ -82,6 +91,18 @@ func DecodeWithOptions(r io.Reader, opts *DecodeOptions) (*gedcom.Document, erro
 
 	// Convert raw tags to proper entity types
 	populateEntities(doc)
+
+	var decodeErrs []error
+	decodeErrs = append(decodeErrs, parseErrs...)
+	if opts.ValidateStructure {
+		decodeErrs = append(decodeErrs, validateStructure(lines)...)
+	}
+	if opts.ValidateXRefs {
+		decodeErrs = append(decodeErrs, validateXRefs(doc)...)
+	}
+	if len(decodeErrs) > 0 {
+		return doc, &DecodeErrors{Errors: decodeErrs}
+	}
 
 	return doc, nil
 }

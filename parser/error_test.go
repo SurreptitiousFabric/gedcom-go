@@ -34,9 +34,19 @@ func TestInvalidTagErrors(t *testing.T) {
 			p := NewParser()
 			_, err := p.ParseLine(tt.input)
 
-			// For now, we accept these as valid (spec allows custom tags)
-			// This test documents current behavior
-			_ = err
+			if err == nil {
+				t.Fatal("Expected error but got none")
+			}
+
+			var tagErr *InvalidTagError
+			if !errors.As(err, &tagErr) {
+				t.Fatalf("Expected InvalidTagError, got %T", err)
+			}
+
+			parseErr, ok := err.(*ParseError)
+			if ok && parseErr.Line != tt.wantLineNum {
+				t.Errorf("Error at line %d, expected line %d", parseErr.Line, tt.wantLineNum)
+			}
 		})
 	}
 }
@@ -54,7 +64,7 @@ func TestHierarchyLevelErrors(t *testing.T) {
 			input: `0 HEAD
 1 GEDC
 5 VERS`,
-			wantErr:    false, // Parser accepts any level, decoder may validate
+			wantErr:    true,
 			expectLine: 3,
 		},
 		{
@@ -90,6 +100,10 @@ func TestHierarchyLevelErrors(t *testing.T) {
 				if ok && parseErr.Line != tt.expectLine {
 					t.Errorf("Error at line %d, expected line %d", parseErr.Line, tt.expectLine)
 				}
+				var levelErr *LevelMismatchError
+				if tt.name == "level jump too large" && !errors.As(err, &levelErr) {
+					t.Errorf("Expected LevelMismatchError, got %T", err)
+				}
 			}
 		})
 	}
@@ -105,22 +119,22 @@ func TestMalformedXRefs(t *testing.T) {
 		{
 			name:    "xref without closing @",
 			input:   "0 @I1 INDI",
-			wantErr: false, // Parsed as tag "@I1", valid at parser level
+			wantErr: true,
 		},
 		{
 			name:    "xref without opening @",
 			input:   "0 I1@ INDI",
-			wantErr: false, // Parsed as tag "I1@", valid at parser level
+			wantErr: true,
 		},
 		{
 			name:    "empty xref",
 			input:   "0 @@ INDI",
-			wantErr: false, // Valid at parser level
+			wantErr: true,
 		},
 		{
 			name:    "xref with spaces",
 			input:   "0 @I 1@ INDI",
-			wantErr: false, // Parsed as tag "@I" with value "1@ INDI"
+			wantErr: true,
 		},
 	}
 

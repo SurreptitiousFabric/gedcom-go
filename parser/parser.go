@@ -29,6 +29,7 @@ import (
 
 // MaxNestingDepth is the maximum allowed nesting depth to prevent stack overflow.
 const MaxNestingDepth = 100
+const maxTagLength = 31
 
 // Parser parses GEDCOM files into Line structures.
 type Parser struct {
@@ -72,22 +73,38 @@ func (p *Parser) ParseLine(input string) (*Line, error) {
 	// Split into parts
 	parts := strings.Fields(line)
 	if len(parts) < 2 {
-		return nil, newParseError(p.lineNumber, "line must have at least level and tag", line)
+		return nil, newParseError(p.lineNumber, "line must have at least level and tag (expected a tag like HEAD, INDI, FAM, or SOUR)", line)
 	}
 
 	// Parse level (first part)
 	level, err := strconv.Atoi(parts[0])
 	if err != nil {
-		return nil, wrapParseError(p.lineNumber, "invalid level number", line, err)
+		return nil, wrapParseError(p.lineNumber, "invalid level number", line, &InvalidLevelError{
+			Raw:    parts[0],
+			Reason: "not a number",
+		})
 	}
 
 	if level < 0 {
-		return nil, newParseError(p.lineNumber, "level cannot be negative", line)
+		return nil, wrapParseError(p.lineNumber, "level cannot be negative", line, &InvalidLevelError{
+			Raw:    parts[0],
+			Reason: "negative",
+		})
 	}
 
 	// Check nesting depth
 	if level > MaxNestingDepth {
-		return nil, newParseError(p.lineNumber, "maximum nesting depth exceeded", line)
+		return nil, wrapParseError(p.lineNumber, "maximum nesting depth exceeded", line, &InvalidLevelError{
+			Raw:    parts[0],
+			Reason: "exceeds max depth",
+		})
+	}
+
+	if p.lastLevel >= 0 && level > p.lastLevel+1 {
+		return nil, wrapParseError(p.lineNumber, "level jump exceeds one", line, &LevelMismatchError{
+			Previous: p.lastLevel,
+			Current:  level,
+		})
 	}
 
 	// Parse XRef and Tag
@@ -97,14 +114,25 @@ func (p *Parser) ParseLine(input string) (*Line, error) {
 	// Check if second part is an XRef (starts with @ and ends with @)
 	if strings.HasPrefix(parts[1], "@") && strings.HasSuffix(parts[1], "@") {
 		xref = parts[1]
+		if err := validateXRef(xref); err != nil {
+			return nil, wrapParseError(p.lineNumber, err.Error(), line, err)
+		}
 		if len(parts) < 3 {
-			return nil, newParseError(p.lineNumber, "line with xref must have a tag", line)
+			return nil, newParseError(p.lineNumber, "line with xref must have a tag (expected a tag like INDI, FAM, or SOUR)", line)
 		}
 		tag = parts[2]
 		valueStartIdx = 3
 	} else {
 		tag = parts[1]
 		valueStartIdx = 2
+	}
+
+	if err := validateTag(tag); err != nil {
+		message := err.Error()
+		if _, ok := err.(*InvalidTagError); ok {
+			message = message + " (expected A-Z, 0-9, underscore, max length 31)"
+		}
+		return nil, wrapParseError(p.lineNumber, message, line, err)
 	}
 
 	// Parse value (everything after the tag)
@@ -120,6 +148,8 @@ func (p *Parser) ParseLine(input string) (*Line, error) {
 			}
 		}
 	}
+
+	p.lastLevel = level
 
 	return &Line{
 		Level:      level,
@@ -139,14 +169,16 @@ func (p *Parser) Parse(r io.Reader) ([]*Line, error) {
 	// Use custom split function that handles CR, LF, and CRLF line endings
 	scanner.Split(scanGEDCOMLines)
 	var lines []*Line
+	var prevLine string
 
 	for scanner.Scan() {
 		text := scanner.Text()
 		line, err := p.ParseLine(text)
 		if err != nil {
-			return nil, err
+			return nil, enrichParseError(err, prevLine, text)
 		}
 		lines = append(lines, line)
+		prevLine = text
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -154,6 +186,62 @@ func (p *Parser) Parse(r io.Reader) ([]*Line, error) {
 	}
 
 	return lines, nil
+}
+
+// ParseWithRecovery parses lines and continues after errors, returning both lines and errors.
+func (p *Parser) ParseWithRecovery(r io.Reader) ([]*Line, []error) {
+	p.Reset()
+
+	scanner := bufio.NewScanner(r)
+	scanner.Split(scanGEDCOMLines)
+	var (
+		lines    []*Line
+		errs     []error
+		prevLine string
+	)
+
+	for scanner.Scan() {
+		text := scanner.Text()
+		line, err := p.ParseLine(text)
+		if err != nil {
+			errs = append(errs, enrichParseError(err, prevLine, text))
+			continue
+		}
+		lines = append(lines, line)
+		prevLine = text
+	}
+
+	if err := scanner.Err(); err != nil {
+		errs = append(errs, wrapParseError(p.lineNumber, "error reading input", "", err))
+	}
+
+	return lines, errs
+}
+
+func validateTag(tag string) error {
+	if tag == "" {
+		return &InvalidTagError{Tag: tag, Reason: "empty"}
+	}
+	if len(tag) > maxTagLength {
+		return &InvalidTagError{Tag: tag, Reason: "too long"}
+	}
+	for _, r := range tag {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' {
+			continue
+		}
+		return &InvalidTagError{Tag: tag, Reason: "contains invalid characters"}
+	}
+	return nil
+}
+
+func validateXRef(xref string) error {
+	if len(xref) <= 2 {
+		return &InvalidXRefError{XRef: xref, Reason: "empty"}
+	}
+	if strings.Count(xref, "@") != 2 {
+		return &InvalidXRefError{XRef: xref, Reason: "must start and end with @"}
+	}
+	return nil
 }
 
 // scanGEDCOMLines is a split function for bufio.Scanner that handles
