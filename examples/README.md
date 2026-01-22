@@ -215,6 +215,35 @@ GEDCOM output:
 
 ---
 
+### 5. Export - Write JSON Listings
+
+**Location**: [`export/main.go`](export/main.go)
+
+**What it does**: Reads a GEDCOM file and writes JSON files for:
+- Individuals (people) and their details
+- Families and their details
+- Sources and their details
+- Places extracted from events/attributes (including optional coordinates)
+
+**How to run**:
+```bash
+cd examples/export
+go run main.go ../../testdata/gedcom-5.5/minimal.ged ./out
+```
+
+**Output files**:
+- `out/individuals.json`
+- `out/families.json`
+- `out/sources.json`
+- `out/places.json`
+
+**Use cases**:
+- Export to downstream tools
+- Data audits and reporting
+- Quick inventory of places and sources
+
+---
+
 ## Running All Examples
 
 You can test all examples at once using the test data provided:
@@ -234,6 +263,9 @@ cd validate && go run main.go ../../testdata/gedcom-5.5/minimal.ged && cd ..
 
 # Run encode example
 cd encode && go run main.go /tmp/output.ged && cd ..
+
+# Run export example
+cd export && go run main.go ../../testdata/gedcom-5.5/minimal.ged ./out && cd ..
 ```
 
 ## Test Data
