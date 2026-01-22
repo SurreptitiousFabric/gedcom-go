@@ -339,7 +339,7 @@ func TestMalformedFilesIntegration(t *testing.T) {
 		{
 			path:        "../testdata/malformed/invalid-level.ged",
 			description: "File with level 99 (unusually deep nesting)",
-			shouldError: false, // Parser accepts any level < 100
+			shouldError: true,
 		},
 		{
 			path:        "../testdata/malformed/invalid-xref.ged",

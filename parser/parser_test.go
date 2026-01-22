@@ -40,6 +40,16 @@ func TestParseLine(t *testing.T) {
 			description: "Individual record with cross-reference",
 		},
 		{
+			name:        "xref contains tag text",
+			input:       "0 @INDI@ INDI Some value",
+			wantLevel:   0,
+			wantTag:     "INDI",
+			wantValue:   "Some value",
+			wantXRef:    "@INDI@",
+			wantErr:     false,
+			description: "XRef includes tag text",
+		},
+		{
 			name:        "level 1 with value",
 			input:       "1 NAME John /Smith/",
 			wantLevel:   1,
@@ -270,20 +280,32 @@ func TestLineNumberTracking(t *testing.T) {
 
 // Test nesting depth checking
 func TestMaxNestingDepth(t *testing.T) {
-	// Build input with >100 levels (should fail)
-	var input strings.Builder
-	for i := 0; i <= 101; i++ {
-		input.WriteString(strings.Repeat(" ", i))
-		input.WriteString("TAG\n")
+	buildInput := func(max int) string {
+		var input strings.Builder
+		for i := 0; i <= max; i++ {
+			fmt.Fprintf(&input, "%d TAG\n", i)
+		}
+		return input.String()
 	}
 
-	// This test will verify that max depth checking works
-	// Implementation should add depth checking
-	p := NewParser()
-	_, err := p.Parse(strings.NewReader(input.String()))
+	t.Run("default limit", func(t *testing.T) {
+		p := NewParser()
+		input := buildInput(MaxNestingDepth + 1)
+		_, err := p.Parse(strings.NewReader(input))
+		if err == nil {
+			t.Fatalf("Parse() expected nesting depth error")
+		}
+	})
 
-	// We expect this to eventually fail when depth checking is implemented
-	_ = err // For now, just parse it
+	t.Run("custom limit", func(t *testing.T) {
+		p := NewParser()
+		p.SetMaxNestingDepth(10)
+		input := buildInput(11)
+		_, err := p.Parse(strings.NewReader(input))
+		if err == nil {
+			t.Fatalf("Parse() expected nesting depth error with custom limit")
+		}
+	})
 }
 
 // Test ParseLine with tag at end of line (no value)

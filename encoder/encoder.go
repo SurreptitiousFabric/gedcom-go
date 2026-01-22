@@ -29,6 +29,11 @@ import (
 	"github.com/cacack/gedcom-go/gedcom"
 )
 
+// Encoder defines the interface for GEDCOM encoding.
+type Encoder interface {
+	Encode(w io.Writer, doc *gedcom.Document) error
+}
+
 // Encode writes a GEDCOM document to a writer.
 func Encode(w io.Writer, doc *gedcom.Document) error {
 	return EncodeWithOptions(w, doc, DefaultOptions())
@@ -65,28 +70,38 @@ func writeHeader(w io.Writer, header *gedcom.Header, opts *EncodeOptions) error 
 		return err
 	}
 
-	if header.Version != "" {
+	var version gedcom.Version
+	if header != nil {
+		version = header.Version
+	}
+	if version != "" {
 		if _, err := fmt.Fprintf(w, "1 GEDC%s", opts.LineEnding); err != nil {
 			return err
 		}
-		if _, err := fmt.Fprintf(w, "2 VERS %s%s", header.Version, opts.LineEnding); err != nil {
+		if _, err := fmt.Fprintf(w, "2 VERS %s%s", version, opts.LineEnding); err != nil {
 			return err
 		}
 	}
 
-	if header.Encoding != "" {
-		if _, err := fmt.Fprintf(w, "1 CHAR %s%s", header.Encoding, opts.LineEnding); err != nil {
+	var encoding gedcom.Encoding
+	if opts != nil && opts.Encoding != "" {
+		encoding = opts.Encoding
+	} else if header != nil {
+		encoding = header.Encoding
+	}
+	if encoding != "" {
+		if _, err := fmt.Fprintf(w, "1 CHAR %s%s", encoding, opts.LineEnding); err != nil {
 			return err
 		}
 	}
 
-	if header.SourceSystem != "" {
+	if header != nil && header.SourceSystem != "" {
 		if _, err := fmt.Fprintf(w, "1 SOUR %s%s", header.SourceSystem, opts.LineEnding); err != nil {
 			return err
 		}
 	}
 
-	if header.Language != "" {
+	if header != nil && header.Language != "" {
 		if _, err := fmt.Fprintf(w, "1 LANG %s%s", header.Language, opts.LineEnding); err != nil {
 			return err
 		}

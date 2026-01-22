@@ -2,6 +2,9 @@ package validator
 
 import (
 	"encoding/json"
+	"io/fs"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -100,6 +103,299 @@ func TestValidateValidFile(t *testing.T) {
 			t.Logf("  - %v", err)
 		}
 	}
+}
+
+func TestValidateInvalidDate(t *testing.T) {
+	input := `0 HEAD
+1 GEDC
+2 VERS 5.5
+0 @I1@ INDI
+1 NAME John /Smith/
+1 BIRT
+2 DATE 32 JAN 2020
+0 TRLR`
+
+	doc, err := decoder.Decode(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("Decode() error = %v", err)
+	}
+
+	v := New()
+	errors := v.Validate(doc)
+
+	if len(errors) == 0 {
+		t.Fatal("Expected validation errors for invalid date")
+	}
+
+	found := false
+	for _, err := range errors {
+		if strings.Contains(err.Error(), "INVALID_DATE") {
+			found = true
+			t.Logf("Found expected error: %v", err)
+		}
+	}
+
+	if !found {
+		t.Error("Expected INVALID_DATE error")
+	}
+}
+
+func TestValidateCircularRelationship(t *testing.T) {
+	input := `0 HEAD
+1 GEDC
+2 VERS 5.5
+0 @I1@ INDI
+1 NAME John /Smith/
+1 FAMC @F1@
+0 @F1@ FAM
+1 HUSB @I1@
+1 CHIL @I1@
+0 TRLR`
+
+	doc, err := decoder.Decode(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("Decode() error = %v", err)
+	}
+
+	v := New()
+	errors := v.Validate(doc)
+
+	if len(errors) == 0 {
+		t.Fatal("Expected validation errors for circular relationship")
+	}
+
+	found := false
+	for _, err := range errors {
+		if strings.Contains(err.Error(), "CIRCULAR_REFERENCE") {
+			found = true
+			t.Logf("Found expected error: %v", err)
+		}
+	}
+
+	if !found {
+		t.Error("Expected CIRCULAR_REFERENCE error")
+	}
+}
+
+func TestValidateNonStandardXRef(t *testing.T) {
+	input := `0 HEAD
+1 GEDC
+2 VERS 5.5
+0 @I-001@ INDI
+1 NAME John /Smith/
+0 TRLR`
+
+	doc, err := decoder.Decode(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("Decode() error = %v", err)
+	}
+
+	v := New()
+	errors := v.Validate(doc)
+
+	if len(errors) == 0 {
+		t.Fatal("Expected validation errors for non-standard XRef")
+	}
+
+	found := false
+	for _, err := range errors {
+		if strings.Contains(err.Error(), "NON_STANDARD_XREF") {
+			found = true
+			t.Logf("Found expected error: %v", err)
+		}
+	}
+
+	if !found {
+		t.Error("Expected NON_STANDARD_XREF error")
+	}
+}
+
+func TestValidateVersionSpecificRules(t *testing.T) {
+	input := `0 HEAD
+1 GEDC
+2 VERS 7.0
+0 @I1@ INDI
+1 NAME John /Smith/
+1 EMAIL john@example.com
+0 TRLR`
+
+	doc, err := decoder.Decode(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("Decode() error = %v", err)
+	}
+
+	v := New()
+	errors := v.Validate(doc)
+
+	if len(errors) == 0 {
+		t.Fatal("Expected validation errors for deprecated tag")
+	}
+
+	found := false
+	for _, err := range errors {
+		if strings.Contains(err.Error(), "DEPRECATED_TAG") {
+			found = true
+			t.Logf("Found expected error: %v", err)
+		}
+	}
+
+	if !found {
+		t.Error("Expected DEPRECATED_TAG error")
+	}
+}
+
+func TestValidateInvalidFilesFromTestdata(t *testing.T) {
+	tests := []struct {
+		name      string
+		path      string
+		codeMatch string
+	}{
+		{name: "missing name", path: "../testdata/validator/missing-name.ged", codeMatch: "MISSING_REQUIRED_FIELD"},
+		{name: "broken xref", path: "../testdata/validator/broken-xref.ged", codeMatch: "BROKEN_XREF"},
+		{name: "invalid date", path: "../testdata/validator/invalid-date.ged", codeMatch: "INVALID_DATE"},
+		{name: "circular relationship", path: "../testdata/validator/circular-relationship.ged", codeMatch: "CIRCULAR_REFERENCE"},
+		{name: "nonstandard xref", path: "../testdata/validator/nonstandard-xref.ged", codeMatch: "NON_STANDARD_XREF"},
+		{name: "deprecated tag 7.0", path: "../testdata/validator/deprecated-tag-70.ged", codeMatch: "DEPRECATED_TAG"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f, err := os.Open(tt.path)
+			if err != nil {
+				t.Fatalf("Open() error = %v", err)
+			}
+			defer f.Close()
+
+			doc, err := decoder.Decode(f)
+			if err != nil {
+				t.Fatalf("Decode() error = %v", err)
+			}
+
+			v := New()
+			errors := v.Validate(doc)
+			if len(errors) == 0 {
+				t.Fatalf("Expected validation errors for %s", tt.name)
+			}
+
+			found := false
+			for _, err := range errors {
+				if strings.Contains(err.Error(), tt.codeMatch) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Fatalf("Expected %s error for %s", tt.codeMatch, tt.name)
+			}
+		})
+	}
+}
+
+func TestValidateSampleFilesVersionRules(t *testing.T) {
+	gedFiles := collectGEDFiles(t, "../testdata/gedcom-7.0")
+	if len(gedFiles) == 0 {
+		t.Fatal("No GEDCOM 7.0 files found")
+	}
+
+	deprecatedTags := []string{"AFN", "EMAIL", "WWW", "FAX", "RFN", "REFN", "RIN"}
+	for _, path := range gedFiles {
+		path := path
+		t.Run(filepath.Base(path), func(t *testing.T) {
+			t.Parallel()
+
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("ReadFile() error = %v", err)
+			}
+			containsDeprecated := false
+			for _, tag := range deprecatedTags {
+				if strings.Contains(string(data), "\n1 "+tag) || strings.Contains(string(data), "\n2 "+tag) || strings.Contains(string(data), "\n3 "+tag) {
+					containsDeprecated = true
+					break
+				}
+			}
+
+			f, err := os.Open(path)
+			if err != nil {
+				t.Fatalf("Open() error = %v", err)
+			}
+			defer f.Close()
+
+			doc, err := decoder.Decode(f)
+			if err != nil {
+				t.Fatalf("Decode() error = %v", err)
+			}
+
+			v := New()
+			errors := v.Validate(doc)
+
+			hasDeprecated := false
+			for _, err := range errors {
+				if strings.Contains(err.Error(), "DEPRECATED_TAG") {
+					hasDeprecated = true
+					break
+				}
+			}
+
+			if containsDeprecated && !hasDeprecated {
+				t.Fatalf("Expected DEPRECATED_TAG error for %s", path)
+			}
+			if !containsDeprecated && hasDeprecated {
+				t.Fatalf("Unexpected DEPRECATED_TAG error for %s", path)
+			}
+		})
+	}
+}
+
+func TestValidateAllSampleFiles(t *testing.T) {
+	gedFiles := collectGEDFiles(t, "../testdata")
+	if len(gedFiles) == 0 {
+		t.Fatal("No GEDCOM files found")
+	}
+
+	for _, path := range gedFiles {
+		if strings.Contains(path, string(filepath.Separator)+"malformed"+string(filepath.Separator)) {
+			continue
+		}
+		path := path
+		t.Run(filepath.Base(path), func(t *testing.T) {
+			f, err := os.Open(path)
+			if err != nil {
+				t.Fatalf("Open() error = %v", err)
+			}
+			defer f.Close()
+
+			doc, err := decoder.Decode(f)
+			if err != nil {
+				t.Fatalf("Decode() error = %v", err)
+			}
+
+			v := New()
+			_ = v.Validate(doc)
+		})
+	}
+}
+
+func collectGEDFiles(t *testing.T, root string) []string {
+	t.Helper()
+
+	var files []string
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if strings.HasSuffix(strings.ToLower(path), ".ged") {
+			files = append(files, path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("WalkDir(%s) error = %v", root, err)
+	}
+	return files
 }
 
 // TestValidationErrorFormatting tests the Error() method of ValidationError

@@ -13,13 +13,25 @@ type DecodeOptions struct {
 
 	// StrictMode enables strict parsing (reject non-standard extensions)
 	StrictMode bool
+
+	// RecoverErrors continues parsing after errors and returns aggregated errors.
+	RecoverErrors bool
+
+	// ValidateXRefs checks for missing cross-reference targets after decoding.
+	ValidateXRefs bool
+
+	// ValidateStructure checks for missing HEAD/TRLR records after decoding.
+	ValidateStructure bool
 }
 
 // DefaultOptions returns the default decoding options.
 func DefaultOptions() *DecodeOptions {
 	return &DecodeOptions{
-		Context:         context.Background(),
-		MaxNestingDepth: 100,
-		StrictMode:      false,
+		Context:           context.Background(),
+		MaxNestingDepth:   100,
+		StrictMode:        false,
+		RecoverErrors:     false,
+		ValidateXRefs:     false,
+		ValidateStructure: false,
 	}
 }

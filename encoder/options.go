@@ -1,5 +1,7 @@
 package encoder
 
+import "github.com/cacack/gedcom-go/gedcom"
+
 // DefaultMaxLineLength is the recommended maximum line length for GEDCOM files.
 // GEDCOM spec recommends lines not exceed 255 characters total.
 // We use 248 to account for level number, space, tag, and delimiter overhead.
@@ -9,6 +11,9 @@ const DefaultMaxLineLength = 248
 type EncodeOptions struct {
 	// LineEnding specifies the line ending to use ("\r\n" or "\n")
 	LineEnding string
+
+	// Encoding overrides the CHAR header value when set.
+	Encoding gedcom.Encoding
 
 	// MaxLineLength specifies the maximum length for line content before
 	// splitting with CONC tags. Default is 248 characters.

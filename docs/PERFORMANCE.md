@@ -94,7 +94,7 @@ Line ending format has negligible impact (<1% overhead for CRLF vs LF).
 
 ### For Large Files (>10 MB)
 
-1. **Stream Processing**: The decoder already uses streaming, but ensure you're not loading entire file into memory first:
+1. **Stream Processing**: The decoder reads a small header buffer for encoding detection, then streams the file. Avoid loading the entire file into memory first:
    ```go
    // Good: Stream from file
    f, _ := os.Open("large.ged")

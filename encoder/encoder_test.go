@@ -3,12 +3,15 @@ package encoder
 import (
 	"bytes"
 	"errors"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/cacack/gedcom-go/decoder"
 	"github.com/cacack/gedcom-go/gedcom"
+	"github.com/cacack/gedcom-go/validator"
 )
 
 func TestEncodeRoundtrip(t *testing.T) {
@@ -110,6 +113,31 @@ func TestEncodeWithOptionsNil(t *testing.T) {
 	// Default line ending is \n
 	if !strings.Contains(output, "\n") {
 		t.Error("Output should contain LF line endings (default)")
+	}
+}
+
+func TestEncodeWithOptionsEncodingOverride(t *testing.T) {
+	doc := &gedcom.Document{
+		Header: &gedcom.Header{
+			Version:  "5.5",
+			Encoding: "UTF-8",
+		},
+		Records: []*gedcom.Record{},
+	}
+
+	opts := &EncodeOptions{
+		LineEnding: "\n",
+		Encoding:   "ANSEL",
+	}
+
+	var buf bytes.Buffer
+	if err := EncodeWithOptions(&buf, doc, opts); err != nil {
+		t.Fatalf("EncodeWithOptions() error = %v", err)
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, "1 CHAR ANSEL") {
+		t.Error("Output should use the encoding override")
 	}
 }
 
@@ -1016,6 +1044,105 @@ func TestRoundtripMinimalFile(t *testing.T) {
 	}
 }
 
+func TestRoundtripAllSampleFiles(t *testing.T) {
+	gedFiles := collectGEDFiles(t, "../testdata")
+	if len(gedFiles) == 0 {
+		t.Fatal("No GEDCOM files found")
+	}
+
+	for _, path := range gedFiles {
+		if strings.Contains(path, string(filepath.Separator)+"malformed"+string(filepath.Separator)) {
+			continue
+		}
+		path := path
+		t.Run(filepath.Base(path), func(t *testing.T) {
+			f, err := os.Open(path)
+			if err != nil {
+				t.Fatalf("Open() error = %v", err)
+			}
+			defer f.Close()
+
+			doc1, err := decoder.Decode(f)
+			if err != nil {
+				t.Fatalf("Decode() error = %v", err)
+			}
+
+			opts := DefaultOptions()
+			if doc1.Header != nil && doc1.Header.Encoding != "" && doc1.Header.Encoding != "UTF-8" {
+				opts.Encoding = "UTF-8"
+			}
+
+			var buf bytes.Buffer
+			if err := EncodeWithOptions(&buf, doc1, opts); err != nil {
+				t.Fatalf("Encode() error = %v", err)
+			}
+
+			doc2, err := decoder.Decode(strings.NewReader(buf.String()))
+			if err != nil {
+				t.Fatalf("Decode() error after roundtrip = %v", err)
+			}
+
+			if len(doc1.Records) != len(doc2.Records) {
+				t.Fatalf("Record count mismatch: got %d, want %d", len(doc2.Records), len(doc1.Records))
+			}
+			if len(doc1.XRefMap) != len(doc2.XRefMap) {
+				t.Fatalf("XRefMap size mismatch: got %d, want %d", len(doc2.XRefMap), len(doc1.XRefMap))
+			}
+			if doc1.Header != nil && doc2.Header != nil {
+				if doc1.Header.Version != doc2.Header.Version {
+					t.Fatalf("Header version mismatch: got %q, want %q", doc2.Header.Version, doc1.Header.Version)
+				}
+				expectedEncoding := doc1.Header.Encoding
+				if opts.Encoding != "" {
+					expectedEncoding = opts.Encoding
+				}
+				if expectedEncoding != doc2.Header.Encoding {
+					t.Fatalf("Header encoding mismatch: got %q, want %q", doc2.Header.Encoding, expectedEncoding)
+				}
+			}
+		})
+	}
+}
+
+func TestEncodedOutputValidatesMinimalFiles(t *testing.T) {
+	paths := []string{
+		"../testdata/gedcom-5.5.1/minimal.ged",
+		"../testdata/gedcom-7.0/minimal70.ged",
+	}
+
+	for _, path := range paths {
+		path := path
+		t.Run(filepath.Base(path), func(t *testing.T) {
+			f, err := os.Open(path)
+			if err != nil {
+				t.Fatalf("Open() error = %v", err)
+			}
+			defer f.Close()
+
+			doc1, err := decoder.Decode(f)
+			if err != nil {
+				t.Fatalf("Decode() error = %v", err)
+			}
+
+			var buf bytes.Buffer
+			if err := Encode(&buf, doc1); err != nil {
+				t.Fatalf("Encode() error = %v", err)
+			}
+
+			doc2, err := decoder.Decode(strings.NewReader(buf.String()))
+			if err != nil {
+				t.Fatalf("Decode() error after roundtrip = %v", err)
+			}
+
+			v := validator.New()
+			errors := v.Validate(doc2)
+			if len(errors) != 0 {
+				t.Fatalf("Expected no validation errors, got %d", len(errors))
+			}
+		})
+	}
+}
+
 // TestRoundtripEntityEncoding tests that entities without tags are properly encoded
 func TestRoundtripEntityEncoding(t *testing.T) {
 	// Create a document with entities but no tags
@@ -1527,4 +1654,26 @@ func TestRoundtripFamilySearchID(t *testing.T) {
 	if indi3.FamilySearchURL() != "" {
 		t.Errorf("@I2@ FamilySearchURL() = %q, want empty", indi3.FamilySearchURL())
 	}
+}
+
+func collectGEDFiles(t *testing.T, root string) []string {
+	t.Helper()
+
+	var files []string
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if strings.HasSuffix(strings.ToLower(path), ".ged") {
+			files = append(files, path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("WalkDir(%s) error = %v", root, err)
+	}
+	return files
 }

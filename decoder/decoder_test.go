@@ -2,11 +2,13 @@ package decoder
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/cacack/gedcom-go/gedcom"
+	"github.com/cacack/gedcom-go/parser"
 )
 
 // T031: Write integration tests for full document parsing
@@ -85,6 +87,121 @@ func TestXRefMap(t *testing.T) {
 	}
 	if rec.XRef != "@I1@" {
 		t.Errorf("Record XRef = %q, want @I1@", rec.XRef)
+	}
+}
+
+func TestDecodeBrokenXRef(t *testing.T) {
+	input := `0 HEAD
+1 GEDC
+2 VERS 5.5
+0 @I1@ INDI
+1 NAME John /Smith/
+1 FAMS @F999@
+0 TRLR`
+
+	opts := DefaultOptions()
+	opts.ValidateXRefs = true
+
+	doc, err := DecodeWithOptions(strings.NewReader(input), opts)
+	if doc == nil {
+		t.Fatal("DecodeWithOptions() returned nil document")
+	}
+	if err == nil {
+		t.Fatal("Expected error for broken xref but got none")
+	}
+
+	var decodeErrs *DecodeErrors
+	if !errors.As(err, &decodeErrs) {
+		t.Fatalf("Expected DecodeErrors, got %T", err)
+	}
+
+	var brokenErr *BrokenXRefError
+	if !errors.As(err, &brokenErr) {
+		t.Fatalf("Expected BrokenXRefError, got %T", err)
+	}
+}
+
+func TestDecodeRecoveryMode(t *testing.T) {
+	input := `0 HEAD
+1 GEDC
+INVALID LINE HERE
+2 VERS 5.5
+0 TRLR`
+
+	opts := DefaultOptions()
+	opts.RecoverErrors = true
+
+	doc, err := DecodeWithOptions(strings.NewReader(input), opts)
+	if doc == nil {
+		t.Fatal("DecodeWithOptions() returned nil document")
+	}
+	if err == nil {
+		t.Fatal("Expected error in recovery mode but got none")
+	}
+
+	var decodeErrs *DecodeErrors
+	if !errors.As(err, &decodeErrs) {
+		t.Fatalf("Expected DecodeErrors, got %T", err)
+	}
+
+	var parseErr *parser.ParseError
+	if !errors.As(err, &parseErr) {
+		t.Fatalf("Expected ParseError, got %T", err)
+	}
+}
+
+func TestDecodeMissingHeaderTrailer(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     string
+		expectErr string
+	}{
+		{
+			name: "missing header",
+			input: `0 @I1@ INDI
+1 NAME John /Smith/
+0 TRLR`,
+			expectErr: "missing header",
+		},
+		{
+			name: "missing trailer",
+			input: `0 HEAD
+1 GEDC
+2 VERS 5.5
+0 @I1@ INDI
+1 NAME John /Smith/`,
+			expectErr: "missing trailer",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := DefaultOptions()
+			opts.ValidateStructure = true
+
+			doc, err := DecodeWithOptions(strings.NewReader(tt.input), opts)
+			if doc == nil {
+				t.Fatal("DecodeWithOptions() returned nil document")
+			}
+			if err == nil {
+				t.Fatal("Expected error but got none")
+			}
+
+			switch tt.expectErr {
+			case "missing header":
+				var missingHeader *MissingHeaderError
+				if !errors.As(err, &missingHeader) {
+					t.Fatalf("Expected MissingHeaderError, got %T", err)
+				}
+			case "missing trailer":
+				var missingTrailer *MissingTrailerError
+				if !errors.As(err, &missingTrailer) {
+					t.Fatalf("Expected MissingTrailerError, got %T", err)
+				}
+			default:
+				t.Fatalf("Unknown expectation %q", tt.expectErr)
+			}
+		})
 	}
 }
 
@@ -206,15 +323,16 @@ func TestDecodeMaxNestingDepth(t *testing.T) {
 	input := `0 HEAD
 1 GEDC
 2 VERS 5.5
+3 TAG too-deep
 0 TRLR`
 
 	opts := &DecodeOptions{
-		MaxNestingDepth: 10,
+		MaxNestingDepth: 2,
 	}
 
 	_, err := DecodeWithOptions(strings.NewReader(input), opts)
-	if err != nil {
-		t.Fatalf("DecodeWithOptions() error = %v", err)
+	if err == nil {
+		t.Fatalf("DecodeWithOptions() expected max depth error")
 	}
 }
 
@@ -223,15 +341,19 @@ func TestDecodeStrictMode(t *testing.T) {
 	input := `0 HEAD
 1 GEDC
 2 VERS 5.5
+1 _CUSTOM value
 0 TRLR`
 
 	opts := &DecodeOptions{
 		StrictMode: true,
 	}
 
-	_, err := DecodeWithOptions(strings.NewReader(input), opts)
-	if err != nil {
-		t.Fatalf("DecodeWithOptions() error = %v", err)
+	doc, err := DecodeWithOptions(strings.NewReader(input), opts)
+	if err == nil {
+		t.Fatalf("DecodeWithOptions() expected strict mode error")
+	}
+	if doc == nil {
+		t.Fatalf("DecodeWithOptions() returned nil document with strict mode error")
 	}
 }
 

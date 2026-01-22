@@ -97,6 +97,7 @@ type utf8Reader struct {
 	bomSkipped bool
 	buffer     []byte // Buffer for BOM bytes that need to be returned
 	bufPos     int    // Current position in buffer
+	pending    []byte // Trailing bytes from an incomplete UTF-8 sequence
 }
 
 func (u *utf8Reader) Read(p []byte) (n int, err error) {
@@ -117,6 +118,10 @@ func (u *utf8Reader) Read(p []byte) (n int, err error) {
 		if err := u.validateAndTrack(p[:n]); err != nil {
 			return 0, err
 		}
+	}
+
+	if err == io.EOF && len(u.pending) > 0 {
+		return 0, &ErrInvalidUTF8{Line: u.line, Column: u.column}
 	}
 
 	return n, err
@@ -164,39 +169,38 @@ func (u *utf8Reader) handleBOM(p []byte) (int, error) {
 }
 
 func (u *utf8Reader) validateAndTrack(p []byte) error {
-	if !utf8.Valid(p) {
-		return u.findInvalidUTF8(p)
+	data := p
+	if len(u.pending) > 0 {
+		data = append(append([]byte{}, u.pending...), p...)
+		u.pending = nil
 	}
-	u.updatePosition(p)
-	return nil
-}
 
-func (u *utf8Reader) findInvalidUTF8(p []byte) error {
-	for i := 0; i < len(p); {
-		r, size := utf8.DecodeRune(p[i:])
+	for i := 0; i < len(data); {
+		if data[i] < utf8.RuneSelf {
+			if data[i] == '\n' {
+				u.line++
+				u.column = 1
+			} else {
+				u.column++
+			}
+			i++
+			continue
+		}
+
+		if !utf8.FullRune(data[i:]) {
+			u.pending = append(u.pending, data[i:]...)
+			return nil
+		}
+
+		r, size := utf8.DecodeRune(data[i:])
 		if r == utf8.RuneError && size == 1 {
-			return &ErrInvalidUTF8{Line: u.line, Column: u.column + i}
+			return &ErrInvalidUTF8{Line: u.line, Column: u.column}
 		}
-		if p[i] == '\n' {
-			u.line++
-			u.column = 1
-		} else {
-			u.column += size
-		}
+		u.column += size
 		i += size
 	}
-	return nil
-}
 
-func (u *utf8Reader) updatePosition(p []byte) {
-	for i := 0; i < len(p); i++ {
-		if p[i] == '\n' {
-			u.line++
-			u.column = 1
-		} else {
-			u.column++
-		}
-	}
+	return nil
 }
 
 // ValidateString checks if a string is valid UTF-8.
@@ -291,35 +295,25 @@ const headerPeekSize = 1000
 // Matches: "1 CHAR ANSEL", "1 CHAR UTF-8", "1 CHAR ASCII", etc.
 var charTagPattern = regexp.MustCompile(`(?i)[\r\n]1\s+CHAR\s+(\S+)`)
 
-// DetectEncodingFromHeader peeks at GEDCOM header to find the CHAR tag.
+// DetectEncodingFromHeader peeks at the GEDCOM header to find the CHAR tag.
 // It returns a new reader with all bytes preserved, the detected encoding,
 // and any error encountered.
 //
 // If the CHAR tag is not found within the first headerPeekSize bytes,
 // EncodingUnknown is returned and the caller should assume UTF-8.
-//
-// Note: This function reads the entire remaining content to avoid issues with
-// multi-byte UTF-8 sequences being split at arbitrary boundaries.
 func DetectEncodingFromHeader(r io.Reader) (io.Reader, Encoding, error) {
-	// Read all content to avoid splitting multi-byte UTF-8 sequences
-	allContent, err := io.ReadAll(r)
-	if err != nil {
+	buf := make([]byte, headerPeekSize)
+	n, err := io.ReadFull(r, buf)
+	if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
 		return nil, EncodingUnknown, err
 	}
-
-	// No data read
-	if len(allContent) == 0 {
+	if n == 0 {
 		return bytes.NewReader(nil), EncodingUnknown, nil
 	}
-
-	// Search for CHAR tag in the first headerPeekSize bytes (or less)
-	searchLen := headerPeekSize
-	if len(allContent) < searchLen {
-		searchLen = len(allContent)
-	}
+	peek := buf[:n]
 
 	encoding := EncodingUnknown
-	matches := charTagPattern.FindSubmatch(allContent[:searchLen])
+	matches := charTagPattern.FindSubmatch(peek)
 	if len(matches) >= 2 {
 		charValue := strings.ToUpper(string(matches[1]))
 		switch charValue {
@@ -343,7 +337,7 @@ func DetectEncodingFromHeader(r io.Reader) (io.Reader, Encoding, error) {
 	}
 
 	// Return reader with all content
-	return bytes.NewReader(allContent), encoding, nil
+	return io.MultiReader(bytes.NewReader(peek), r), encoding, nil
 }
 
 // NewReaderWithEncoding wraps a reader with the specified encoding converter.

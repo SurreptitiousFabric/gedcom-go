@@ -153,20 +153,25 @@ import (
     "github.com/cacack/gedcom-go/decoder"
 )
 
+ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+defer cancel()
+
 opts := &decoder.DecodeOptions{
     // Set a timeout for parsing large files
-    Context: func() context.Context {
-        ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-        // Don't forget to cancel when done
-        defer cancel()
-        return ctx
-    }(),
+    Context: ctx,
 
-    // Strict mode - fail on any validation errors
-    Strict: false,
+    // Reject non-standard tags (tags starting with "_")
+    StrictMode: false,
 
-    // Maximum line length (default: 255 for GEDCOM 5.5/5.5.1, unlimited for 7.0)
-    MaxLineLength: 255,
+    // Maximum allowed tag nesting depth (default: 100)
+    MaxNestingDepth: 100,
+
+    // Continue parsing after recoverable errors
+    RecoverErrors: false,
+
+    // Post-parse validations
+    ValidateXRefs:     true,
+    ValidateStructure: true,
 }
 
 doc, err := decoder.DecodeWithOptions(f, opts)
@@ -798,21 +803,31 @@ if err != nil {
 For more detailed error information, use the parser directly:
 
 ```go
-import "github.com/cacack/gedcom-go/parser"
+import (
+    "bufio"
+    "fmt"
+    "log"
 
-p := parser.New(f)
-for {
-    line, err := p.ParseLine()
-    if err == io.EOF {
-        break
-    }
+    "github.com/cacack/gedcom-go/parser"
+)
+
+p := parser.NewParser()
+scanner := bufio.NewScanner(f)
+scanner.Split(parser.ScanGEDCOMLines)
+
+for scanner.Scan() {
+    line, err := p.ParseLine(scanner.Text())
     if err != nil {
         if parseErr, ok := err.(*parser.ParseError); ok {
             fmt.Printf("Parse error at line %d: %s\n",
                 parseErr.Line, parseErr.Message)
         }
+        continue
     }
     // Process line...
+}
+if err := scanner.Err(); err != nil {
+    log.Fatal(err)
 }
 ```
 
@@ -861,19 +876,25 @@ case <-time.After(10 * time.Second):
 For very large GEDCOM files, use the lower-level parser to avoid loading everything into memory:
 
 ```go
-import "github.com/cacack/gedcom-go/parser"
+import (
+    "bufio"
+    "fmt"
+    "log"
+    "os"
+
+    "github.com/cacack/gedcom-go/parser"
+)
 
 f, _ := os.Open("large.ged")
 defer f.Close()
 
-p := parser.New(f)
-individualCount := 0
+p := parser.NewParser()
+scanner := bufio.NewScanner(f)
+scanner.Split(parser.ScanGEDCOMLines)
 
-for {
-    line, err := p.ParseLine()
-    if err == io.EOF {
-        break
-    }
+individualCount := 0
+for scanner.Scan() {
+    line, err := p.ParseLine(scanner.Text())
     if err != nil {
         log.Fatal(err)
     }
@@ -882,6 +903,9 @@ for {
     if line.Level == 0 && line.Tag == "INDI" {
         individualCount++
     }
+}
+if err := scanner.Err(); err != nil {
+    log.Fatal(err)
 }
 
 fmt.Printf("Found %d individuals\n", individualCount)
