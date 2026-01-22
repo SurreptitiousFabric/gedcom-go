@@ -29,7 +29,7 @@ func (v *Validator) validateDates(doc *gedcom.Document) {
 			if err := parsed.Validate(); err != nil {
 				v.errors = append(v.errors, &ValidationError{
 					Code:    "INVALID_DATE",
-					Message: fmt.Sprintf("Invalid date %q: %s", value, err.Error()),
+					Message: fmt.Sprintf("Invalid date %q: %v", value, err),
 					Line:    tag.LineNumber,
 				})
 			}

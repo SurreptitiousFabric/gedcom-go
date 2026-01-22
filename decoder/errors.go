@@ -68,3 +68,17 @@ func (e *MissingTrailerError) Error() string {
 	}
 	return fmt.Sprintf("line %d: missing TRLR record", e.Line)
 }
+
+// NonStandardTagError reports a custom tag when strict mode is enabled.
+type NonStandardTagError struct {
+	Line    int
+	Tag     string
+	Context string
+}
+
+func (e *NonStandardTagError) Error() string {
+	if e.Context != "" {
+		return fmt.Sprintf("line %d: non-standard tag %s (context: %q)", e.Line, e.Tag, e.Context)
+	}
+	return fmt.Sprintf("line %d: non-standard tag %s", e.Line, e.Tag)
+}

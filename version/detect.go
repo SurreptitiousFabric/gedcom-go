@@ -48,48 +48,23 @@ func detectFromHeader(lines []*parser.Line) gedcom.Version {
 	inGedc := false
 
 	for _, line := range lines {
-		if version := processHeaderLine(line, &inHead, &inGedc); version != "" {
-			return version
+		switch line.Level {
+		case 0:
+			inHead = line.Tag == "HEAD"
+			inGedc = false
+		case 1:
+			if inHead {
+				inGedc = line.Tag == "GEDC"
+			}
+		case 2:
+			if inHead && inGedc && line.Tag == "VERS" {
+				if version := parseVersionString(line.Value); version != "" {
+					return version
+				}
+			}
 		}
 	}
 
-	return ""
-}
-
-func processHeaderLine(line *parser.Line, inHead, inGedc *bool) gedcom.Version {
-	// Handle level 0 tags
-	if line.Level == 0 {
-		return handleLevel0(line, inHead)
-	}
-
-	// Handle level 1 tags within HEAD
-	if *inHead && line.Level == 1 {
-		return handleLevel1(line, inGedc)
-	}
-
-	// Handle level 2 VERS tag within GEDC
-	if *inHead && *inGedc && line.Level == 2 && line.Tag == "VERS" {
-		return parseVersionString(line.Value)
-	}
-
-	return ""
-}
-
-func handleLevel0(line *parser.Line, inHead *bool) gedcom.Version {
-	if line.Tag == "HEAD" {
-		*inHead = true
-	} else {
-		*inHead = false
-	}
-	return ""
-}
-
-func handleLevel1(line *parser.Line, inGedc *bool) gedcom.Version {
-	if line.Tag == "GEDC" {
-		*inGedc = true
-	} else {
-		*inGedc = false
-	}
 	return ""
 }
 

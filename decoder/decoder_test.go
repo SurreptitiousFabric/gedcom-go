@@ -323,15 +323,16 @@ func TestDecodeMaxNestingDepth(t *testing.T) {
 	input := `0 HEAD
 1 GEDC
 2 VERS 5.5
+3 TAG too-deep
 0 TRLR`
 
 	opts := &DecodeOptions{
-		MaxNestingDepth: 10,
+		MaxNestingDepth: 2,
 	}
 
 	_, err := DecodeWithOptions(strings.NewReader(input), opts)
-	if err != nil {
-		t.Fatalf("DecodeWithOptions() error = %v", err)
+	if err == nil {
+		t.Fatalf("DecodeWithOptions() expected max depth error")
 	}
 }
 
@@ -340,15 +341,19 @@ func TestDecodeStrictMode(t *testing.T) {
 	input := `0 HEAD
 1 GEDC
 2 VERS 5.5
+1 _CUSTOM value
 0 TRLR`
 
 	opts := &DecodeOptions{
 		StrictMode: true,
 	}
 
-	_, err := DecodeWithOptions(strings.NewReader(input), opts)
-	if err != nil {
-		t.Fatalf("DecodeWithOptions() error = %v", err)
+	doc, err := DecodeWithOptions(strings.NewReader(input), opts)
+	if err == nil {
+		t.Fatalf("DecodeWithOptions() expected strict mode error")
+	}
+	if doc == nil {
+		t.Fatalf("DecodeWithOptions() returned nil document with strict mode error")
 	}
 }
 

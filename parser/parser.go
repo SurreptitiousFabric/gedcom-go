@@ -7,16 +7,18 @@
 //
 // Example usage:
 //
-//	p := parser.NewParser(reader)
-//	for {
-//	    line, err := p.ParseLine()
-//	    if err == io.EOF {
-//	        break
-//	    }
+//	p := parser.NewParser()
+//	scanner := bufio.NewScanner(reader)
+//	scanner.Split(parser.ScanGEDCOMLines)
+//	for scanner.Scan() {
+//	    line, err := p.ParseLine(scanner.Text())
 //	    if err != nil {
 //	        log.Fatal(err)
 //	    }
 //	    fmt.Printf("Level %d: %s = %s\n", line.Level, line.Tag, line.Value)
+//	}
+//	if err := scanner.Err(); err != nil {
+//	    log.Fatal(err)
 //	}
 package parser
 
@@ -25,16 +27,24 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 // MaxNestingDepth is the maximum allowed nesting depth to prevent stack overflow.
 const MaxNestingDepth = 100
+
+// maxTagLength is the maximum tag length allowed by GEDCOM.
 const maxTagLength = 31
+
+// maxScannerTokenSize controls the maximum line size accepted by the scanner.
+// This allows long GEDCOM lines (for example, URLs or unwrapped text).
+const maxScannerTokenSize = 1024 * 1024
 
 // Parser parses GEDCOM files into Line structures.
 type Parser struct {
 	lineNumber int
 	lastLevel  int
+	maxDepth   int
 }
 
 // NewParser creates a new Parser instance.
@@ -42,6 +52,7 @@ func NewParser() *Parser {
 	return &Parser{
 		lineNumber: 0,
 		lastLevel:  -1,
+		maxDepth:   MaxNestingDepth,
 	}
 }
 
@@ -49,6 +60,16 @@ func NewParser() *Parser {
 func (p *Parser) Reset() {
 	p.lineNumber = 0
 	p.lastLevel = -1
+}
+
+// SetMaxNestingDepth sets the maximum allowed nesting depth.
+// Values <= 0 reset to the default MaxNestingDepth.
+func (p *Parser) SetMaxNestingDepth(max int) {
+	if max <= 0 {
+		p.maxDepth = MaxNestingDepth
+		return
+	}
+	p.maxDepth = max
 }
 
 // ParseLine parses a single GEDCOM line.
@@ -93,7 +114,11 @@ func (p *Parser) ParseLine(input string) (*Line, error) {
 	}
 
 	// Check nesting depth
-	if level > MaxNestingDepth {
+	limit := p.maxDepth
+	if limit <= 0 {
+		limit = MaxNestingDepth
+	}
+	if level > limit {
 		return nil, wrapParseError(p.lineNumber, "maximum nesting depth exceeded", line, &InvalidLevelError{
 			Raw:    parts[0],
 			Reason: "exceeds max depth",
@@ -108,7 +133,10 @@ func (p *Parser) ParseLine(input string) (*Line, error) {
 	}
 
 	// Parse XRef and Tag
-	var xref, tag string
+	var (
+		xref string
+		tag  string
+	)
 	var valueStartIdx int
 
 	// Check if second part is an XRef (starts with @ and ends with @)
@@ -138,14 +166,9 @@ func (p *Parser) ParseLine(input string) (*Line, error) {
 	// Parse value (everything after the tag)
 	var value string
 	if valueStartIdx < len(parts) {
-		// Find the position in the original line where the value starts
-		// We need to preserve original spacing in the value
-		tagPos := strings.Index(line, tag)
-		if tagPos >= 0 {
-			afterTag := tagPos + len(tag)
-			if afterTag < len(line) {
-				value = strings.TrimLeft(line[afterTag:], " ")
-			}
+		valueStartPos := fieldStartIndex(line, valueStartIdx)
+		if valueStartPos >= 0 && valueStartPos < len(line) {
+			value = line[valueStartPos:]
 		}
 	}
 
@@ -160,14 +183,40 @@ func (p *Parser) ParseLine(input string) (*Line, error) {
 	}, nil
 }
 
+func fieldStartIndex(line string, fieldIndex int) int {
+	if fieldIndex < 0 {
+		return -1
+	}
+
+	inField := false
+	field := 0
+
+	for i, r := range line {
+		if unicode.IsSpace(r) {
+			inField = false
+			continue
+		}
+		if !inField {
+			if field == fieldIndex {
+				return i
+			}
+			field++
+			inField = true
+		}
+	}
+
+	return -1
+}
+
 // Parse reads a GEDCOM file from a reader and returns all parsed lines.
 // Supports all line ending styles: LF (Unix), CRLF (Windows), CR (old Macintosh).
 func (p *Parser) Parse(r io.Reader) ([]*Line, error) {
 	p.Reset()
 
 	scanner := bufio.NewScanner(r)
+	scanner.Buffer(make([]byte, 64*1024), maxScannerTokenSize)
 	// Use custom split function that handles CR, LF, and CRLF line endings
-	scanner.Split(scanGEDCOMLines)
+	scanner.Split(ScanGEDCOMLines)
 	var lines []*Line
 	var prevLine string
 
@@ -193,7 +242,8 @@ func (p *Parser) ParseWithRecovery(r io.Reader) ([]*Line, []error) {
 	p.Reset()
 
 	scanner := bufio.NewScanner(r)
-	scanner.Split(scanGEDCOMLines)
+	scanner.Buffer(make([]byte, 64*1024), maxScannerTokenSize)
+	scanner.Split(ScanGEDCOMLines)
 	var (
 		lines    []*Line
 		errs     []error
@@ -244,10 +294,10 @@ func validateXRef(xref string) error {
 	return nil
 }
 
-// scanGEDCOMLines is a split function for bufio.Scanner that handles
+// ScanGEDCOMLines is a split function for bufio.Scanner that handles
 // all GEDCOM line ending styles: LF, CRLF, and CR (old Macintosh).
 // This is based on bufio.ScanLines but adds CR-only support.
-func scanGEDCOMLines(data []byte, atEOF bool) (advance int, token []byte, err error) {
+func ScanGEDCOMLines(data []byte, atEOF bool) (advance int, token []byte, err error) {
 	if atEOF && len(data) == 0 {
 		return 0, nil, nil
 	}

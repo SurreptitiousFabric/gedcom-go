@@ -42,7 +42,7 @@ For a general-purpose GEDCOM library with broader scope, please refer to the ups
 - **Historical Calendar Support**: Parse dates in Julian, Hebrew, and French Republican calendars
 - **Read and Write**: Full decoder and encoder for round-trip processing
 - **Comprehensive Validation**: Version-aware validation with clear error messages
-- **Zero Dependencies**: Uses only the Go standard library
+- **Minimal Dependencies**: Uses the Go standard library plus `golang.org/x/text` for charset conversion
 - **Well-tested**: 93% test coverage with multi-platform CI
 
 See [FEATURES.md](FEATURES.md) for the complete feature list including all supported record types, events, attributes, and encoding details.

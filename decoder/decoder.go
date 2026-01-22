@@ -56,6 +56,7 @@ func DecodeWithOptions(r io.Reader, opts *DecodeOptions) (*gedcom.Document, erro
 
 	// Parse all lines
 	p := parser.NewParser()
+	p.SetMaxNestingDepth(opts.MaxNestingDepth)
 	var (
 		lines     []*parser.Line
 		err       error
@@ -94,6 +95,9 @@ func DecodeWithOptions(r io.Reader, opts *DecodeOptions) (*gedcom.Document, erro
 
 	var decodeErrs []error
 	decodeErrs = append(decodeErrs, parseErrs...)
+	if opts.StrictMode {
+		decodeErrs = append(decodeErrs, validateStrictTags(lines)...)
+	}
 	if opts.ValidateStructure {
 		decodeErrs = append(decodeErrs, validateStructure(lines)...)
 	}

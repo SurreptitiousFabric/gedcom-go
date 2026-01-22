@@ -230,16 +230,12 @@ func (v *Validator) Validate(doc *gedcom.Document) []error {
 
 // validateXRefs checks that all cross-references are valid.
 func (v *Validator) validateXRefs(doc *gedcom.Document) {
-	// Track all XRef usages
-	usedXRefs := make(map[string]bool)
-
 	// Scan all records for XRef usage
 	for _, record := range doc.Records {
 		for _, tag := range record.Tags {
 			// Check if value looks like an XRef
 			if len(tag.Value) > 2 && tag.Value[0] == '@' && tag.Value[len(tag.Value)-1] == '@' {
 				xref := tag.Value
-				usedXRefs[xref] = true
 
 				// Verify the XRef exists
 				if doc.XRefMap[xref] == nil {
