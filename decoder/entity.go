@@ -301,6 +301,8 @@ func parseSourceCitationData(tags []*gedcom.Tag, dataIdx, baseLevel int) *gedcom
 				data.Date = tag.Value
 			case "TEXT":
 				data.Text = tag.Value
+			case "WWW":
+				data.URL = tag.Value
 			}
 		}
 	}

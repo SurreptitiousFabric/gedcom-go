@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/cacack/gedcom-go/gedcom"
@@ -21,6 +22,7 @@ type Options struct {
 type IntermediateModel struct {
 	Persons                []PersonRow
 	Events                 []EventRow
+	EventDetails           []EventDetailRow
 	Places                 []PlaceRow
 	Groups                 []GroupRow
 	PersonEventLinks       []PersonEventLink
@@ -62,6 +64,16 @@ type EventRow struct {
 	GedcomPath string
 	RawDate    string
 	RawPlace   string
+}
+
+// EventDetailRow maps to event_details.csv.
+type EventDetailRow struct {
+	EventKey   string
+	Tag        string
+	Value      string
+	XRef       string
+	Seq        int
+	GedcomPath string
 }
 
 // PlaceRow maps to places.csv.
@@ -120,11 +132,13 @@ type SourceRow struct {
 
 // CitationRow maps to citations.csv.
 type CitationRow struct {
-	Key        string
-	SourceKey  string
-	Detail     string
-	Quote      string
-	GedcomPath string
+	Key         string
+	SourceKey   string
+	Detail      string
+	Quote       string
+	DataURL     string
+	AncestryURL string
+	GedcomPath  string
 }
 
 // EntityCitationLink maps to entity_citation_links.csv.
@@ -153,6 +167,8 @@ type SourceCitationIdentity struct {
 	SourceXRef string
 	Detail     string
 	Quote      string
+	DataURL    string
+	AncestryID string
 	Path       string
 }
 
@@ -218,7 +234,7 @@ func BuildIntermediateModel(doc *gedcom.Document) *IntermediateModel {
 			if event == nil {
 				continue
 			}
-			model.addEventForIndividual(individual, event, eventCounter)
+			model.addEventForIndividual(individual, event, eventCounter, allNotes)
 		}
 		for _, attribute := range individual.Attributes {
 			if attribute == nil {
@@ -269,7 +285,7 @@ func BuildIntermediateModel(doc *gedcom.Document) *IntermediateModel {
 			if event == nil {
 				continue
 			}
-			model.addEventForFamily(family, event, eventCounter)
+			model.addEventForFamily(family, event, eventCounter, allNotes)
 		}
 
 		model.collectGroupLinks(family)
@@ -279,6 +295,12 @@ func BuildIntermediateModel(doc *gedcom.Document) *IntermediateModel {
 
 	sort.Slice(model.Persons, func(i, j int) bool { return model.Persons[i].Key < model.Persons[j].Key })
 	sort.Slice(model.Events, func(i, j int) bool { return model.Events[i].Key < model.Events[j].Key })
+	sort.Slice(model.EventDetails, func(i, j int) bool {
+		if model.EventDetails[i].EventKey != model.EventDetails[j].EventKey {
+			return model.EventDetails[i].EventKey < model.EventDetails[j].EventKey
+		}
+		return model.EventDetails[i].Seq < model.EventDetails[j].Seq
+	})
 	sort.Slice(model.Places, func(i, j int) bool { return model.Places[i].Key < model.Places[j].Key })
 	sort.Slice(model.Groups, func(i, j int) bool { return model.Groups[i].Key < model.Groups[j].Key })
 	sort.Slice(model.PersonEventLinks, func(i, j int) bool {
@@ -365,7 +387,7 @@ func detectDuplicateLinks[T any](links []T, keyFn func(T) string, entityType str
 	return issues
 }
 
-func (m *IntermediateModel) addEventForIndividual(individual *gedcom.Individual, event *gedcom.Event, counter map[string]int) {
+func (m *IntermediateModel) addEventForIndividual(individual *gedcom.Individual, event *gedcom.Event, counter map[string]int, noteLookup map[string]*gedcom.Note) {
 	ownerXRef := individual.XRef
 	tag := string(event.Type)
 	if tag == "" {
@@ -394,6 +416,7 @@ func (m *IntermediateModel) addEventForIndividual(individual *gedcom.Individual,
 		RawDate:    event.Date,
 		RawPlace:   rawPlace,
 	})
+	m.collectEventDetailsForEvent(key, ownerXRef, path, rawPlace, event, noteLookup)
 	if personKey := m.personKey(ownerXRef); personKey != "" {
 		m.PersonEventLinks = append(m.PersonEventLinks, PersonEventLink{
 			PersonKey:  personKey,
@@ -435,6 +458,7 @@ func (m *IntermediateModel) addAttributeForIndividual(individual *gedcom.Individ
 		RawDate:    attribute.Date,
 		RawPlace:   rawPlace,
 	})
+	m.collectEventDetailsForAttribute(key, path, rawPlace, attribute)
 	if personKey := m.personKey(ownerXRef); personKey != "" {
 		m.PersonEventLinks = append(m.PersonEventLinks, PersonEventLink{
 			PersonKey:  personKey,
@@ -447,7 +471,7 @@ func (m *IntermediateModel) addAttributeForIndividual(individual *gedcom.Individ
 	m.collectCitationsForEvent(key, ownerXRef, path, attribute.SourceCitations)
 }
 
-func (m *IntermediateModel) addEventForFamily(family *gedcom.Family, event *gedcom.Event, counter map[string]int) {
+func (m *IntermediateModel) addEventForFamily(family *gedcom.Family, event *gedcom.Event, counter map[string]int, noteLookup map[string]*gedcom.Note) {
 	ownerXRef := family.XRef
 	tag := string(event.Type)
 	if tag == "" {
@@ -476,6 +500,7 @@ func (m *IntermediateModel) addEventForFamily(family *gedcom.Family, event *gedc
 		RawDate:    event.Date,
 		RawPlace:   rawPlace,
 	})
+	m.collectEventDetailsForEvent(key, ownerXRef, path, rawPlace, event, noteLookup)
 
 	m.addFamilyEventLinks(family, key, path)
 	m.collectCitationsForEvent(key, ownerXRef, path, event.SourceCitations)
@@ -517,6 +542,189 @@ func (m *IntermediateModel) addFamilyEventLinks(family *gedcom.Family, eventKey,
 	for _, child := range family.Children {
 		addLink(child, "CHIL")
 	}
+}
+
+func (m *IntermediateModel) collectEventDetailsForEvent(eventKey, ownerXRef, path, rawPlace string, event *gedcom.Event, noteLookup map[string]*gedcom.Note) {
+	if event == nil {
+		return
+	}
+	seq := 1
+	m.addEventDetailRow(eventKey, "DATE", event.Date, "", path, &seq)
+	m.addEventDetailRow(eventKey, "PLAC", rawPlace, "", path, &seq)
+	if event.PlaceDetail != nil {
+		m.addEventDetailRow(eventKey, "PLAC.FORM", event.PlaceDetail.Form, "", path, &seq)
+	}
+	m.addEventDetailRow(eventKey, "DESC", event.Description, "", path, &seq)
+	m.addEventDetailRow(eventKey, "TYPE", event.EventTypeDetail, "", path, &seq)
+	m.addEventDetailRow(eventKey, "CAUS", event.Cause, "", path, &seq)
+	m.addEventDetailRow(eventKey, "AGE", event.Age, "", path, &seq)
+	m.addEventDetailRow(eventKey, "AGNC", event.Agency, "", path, &seq)
+
+	if event.Address != nil {
+		m.addEventDetailRow(eventKey, "ADDR", event.Address.Line1, "", path, &seq)
+		m.addEventDetailRow(eventKey, "ADR2", event.Address.Line2, "", path, &seq)
+		m.addEventDetailRow(eventKey, "ADR3", event.Address.Line3, "", path, &seq)
+		m.addEventDetailRow(eventKey, "CITY", event.Address.City, "", path, &seq)
+		m.addEventDetailRow(eventKey, "STAE", event.Address.State, "", path, &seq)
+		m.addEventDetailRow(eventKey, "POST", event.Address.PostalCode, "", path, &seq)
+		m.addEventDetailRow(eventKey, "CTRY", event.Address.Country, "", path, &seq)
+	}
+
+	for _, phone := range event.Phone {
+		m.addEventDetailRow(eventKey, "PHON", phone, "", path, &seq)
+	}
+	for _, email := range event.Email {
+		m.addEventDetailRow(eventKey, "EMAIL", email, "", path, &seq)
+	}
+	for _, fax := range event.Fax {
+		m.addEventDetailRow(eventKey, "FAX", fax, "", path, &seq)
+	}
+	for _, website := range event.Website {
+		m.addEventDetailRow(eventKey, "WWW", website, "", path, &seq)
+	}
+	m.addEventDetailRow(eventKey, "RESN", event.Restriction, "", path, &seq)
+	m.addEventDetailRow(eventKey, "UID", event.UID, "", path, &seq)
+	m.addEventDetailRow(eventKey, "SDATE", event.SortDate, "", path, &seq)
+
+	for _, noteValue := range event.Notes {
+		if noteValue == "" {
+			continue
+		}
+		noteText, noteXRef := resolveEventNote(noteValue, noteLookup, &m.Issues, eventKey, ownerXRef, path)
+		m.addEventDetailRow(eventKey, "NOTE", noteText, noteXRef, path, &seq)
+		for _, detail := range parseNoteDetails(noteText) {
+			m.addEventDetailRow(eventKey, detail.Tag, detail.Value, "", path, &seq)
+		}
+	}
+
+	for _, media := range event.Media {
+		if media == nil {
+			continue
+		}
+		m.addEventDetailRow(eventKey, "OBJE", media.Title, media.MediaXRef, path, &seq)
+		if media.Crop == nil {
+			continue
+		}
+		m.addEventDetailRow(eventKey, "CROP.LEFT", strconv.Itoa(media.Crop.Left), "", path, &seq)
+		m.addEventDetailRow(eventKey, "CROP.TOP", strconv.Itoa(media.Crop.Top), "", path, &seq)
+		m.addEventDetailRow(eventKey, "CROP.WIDTH", strconv.Itoa(media.Crop.Width), "", path, &seq)
+		m.addEventDetailRow(eventKey, "CROP.HEIGHT", strconv.Itoa(media.Crop.Height), "", path, &seq)
+	}
+
+	for _, tag := range event.Tags {
+		if tag == nil {
+			continue
+		}
+		m.addEventDetailRow(eventKey, tag.Tag, tag.Value, tag.XRef, path, &seq)
+	}
+}
+
+func (m *IntermediateModel) collectEventDetailsForAttribute(eventKey, path, rawPlace string, attribute *gedcom.Attribute) {
+	if attribute == nil {
+		return
+	}
+	seq := 1
+	tag := attribute.Type
+	if tag == "" {
+		tag = "ATTR"
+	}
+	m.addEventDetailRow(eventKey, tag, attribute.Value, "", path, &seq)
+	m.addEventDetailRow(eventKey, "DATE", attribute.Date, "", path, &seq)
+	m.addEventDetailRow(eventKey, "PLAC", rawPlace, "", path, &seq)
+}
+
+func (m *IntermediateModel) addEventDetailRow(eventKey, tag, value, xref, path string, seq *int) {
+	if tag == "" {
+		return
+	}
+	if value == "" && xref == "" {
+		return
+	}
+	m.EventDetails = append(m.EventDetails, EventDetailRow{
+		EventKey:   eventKey,
+		Tag:        tag,
+		Value:      value,
+		XRef:       xref,
+		Seq:        *seq,
+		GedcomPath: path,
+	})
+	*seq++
+}
+
+type noteDetail struct {
+	Tag   string
+	Value string
+}
+
+func parseNoteDetails(note string) []noteDetail {
+	segments := strings.Split(note, ";")
+	details := make([]noteDetail, 0, len(segments))
+	for _, segment := range segments {
+		segment = strings.TrimSpace(segment)
+		if segment == "" {
+			continue
+		}
+		idx := strings.Index(segment, ":")
+		if idx < 0 {
+			continue
+		}
+		rawKey := strings.TrimSpace(segment[:idx])
+		value := strings.TrimSpace(segment[idx+1:])
+		if rawKey == "" || value == "" {
+			continue
+		}
+		keyLower := strings.ToLower(rawKey)
+		tag := noteDetailTag(keyLower, rawKey)
+		details = append(details, noteDetail{Tag: tag, Value: value})
+	}
+	return details
+}
+
+func noteDetailTag(keyLower, rawKey string) string {
+	switch keyLower {
+	case "age":
+		return "NOTE.AGE"
+	case "age at death":
+		return "NOTE.AGE_AT_DEATH"
+	case "relation to head of house", "relation to head", "relationship to head", "relationship":
+		return "NOTE.RELATION_TO_HEAD_OF_HOUSE"
+	case "relation":
+		return "NOTE.RELATION"
+	case "marital status":
+		return "NOTE.MARITAL_STATUS"
+	case "occupation":
+		return "NOTE.OCCUPATION"
+	}
+	return "NOTE." + normalizeNoteKey(rawKey)
+}
+
+func normalizeNoteKey(key string) string {
+	var b strings.Builder
+	b.Grow(len(key))
+	prevUnderscore := false
+	for _, r := range key {
+		switch {
+		case r >= 'a' && r <= 'z':
+			b.WriteRune(r - 'a' + 'A')
+			prevUnderscore = false
+		case r >= 'A' && r <= 'Z':
+			b.WriteRune(r)
+			prevUnderscore = false
+		case r >= '0' && r <= '9':
+			b.WriteRune(r)
+			prevUnderscore = false
+		default:
+			if !prevUnderscore {
+				b.WriteByte('_')
+				prevUnderscore = true
+			}
+		}
+	}
+	normalized := strings.Trim(b.String(), "_")
+	if normalized == "" {
+		return "DETAIL"
+	}
+	return normalized
 }
 
 func (m *IntermediateModel) collectGroupLinks(family *gedcom.Family) {
@@ -642,6 +850,8 @@ func (m *IntermediateModel) collectCitations(entityKey, entityType, ownerXRef, p
 			SourceXRef: citation.SourceXRef,
 			Detail:     citation.Page,
 			Quote:      citationQuote(citation),
+			DataURL:    citationDataURL(citation),
+			AncestryID: citationAncestryID(citation),
 			Path:       path,
 		}
 		identityKey := citationIdentityKey(identity)
@@ -651,11 +861,13 @@ func (m *IntermediateModel) collectCitations(entityKey, entityType, ownerXRef, p
 			m.CitationKeyByIdentity[identityKey] = citationKey
 			m.SourceCitationIdentity[citationKey] = identity
 			m.Citations = append(m.Citations, CitationRow{
-				Key:        citationKey,
-				SourceKey:  m.sourceKey(citation.SourceXRef, ownerXRef, path),
-				Detail:     citation.Page,
-				Quote:      citationQuote(citation),
-				GedcomPath: path,
+				Key:         citationKey,
+				SourceKey:   m.sourceKey(citation.SourceXRef, ownerXRef, path),
+				Detail:      citation.Page,
+				Quote:       citationQuote(citation),
+				DataURL:     citationDataURL(citation),
+				AncestryURL: citationAncestryURL(citation),
+				GedcomPath:  path,
 			})
 		}
 		m.EntityCitationLinks = append(m.EntityCitationLinks, EntityCitationLink{
@@ -828,6 +1040,32 @@ func collectNotes(noteXRefs []string, noteLookup map[string]*gedcom.Note, issues
 	return strings.TrimSpace(strings.Join(parts, "\n\n"))
 }
 
+func resolveEventNote(noteValue string, noteLookup map[string]*gedcom.Note, issues *[]Issue, eventKey, ownerXRef, path string) (string, string) {
+	if !isXRef(noteValue) {
+		return noteValue, ""
+	}
+	note := noteLookup[noteValue]
+	if note == nil {
+		*issues = append(*issues, Issue{
+			Severity:        "ERROR",
+			EntityType:      "event",
+			EntityKey:       eventKey,
+			GedcomXRef:      ownerXRef,
+			GedcomPath:      path,
+			IssueCode:       "UNRESOLVED_POINTER",
+			Message:         "Note reference points to missing note record",
+			RawValue:        noteValue,
+			SuggestedAction: "Verify the note xref or add the missing note record.",
+		})
+		return noteValue, noteValue
+	}
+	return note.FullText(), noteValue
+}
+
+func isXRef(value string) bool {
+	return strings.HasPrefix(value, "@") && strings.HasSuffix(value, "@") && len(value) > 2
+}
+
 func eventTitle(event *gedcom.Event, fallback string) string {
 	if event == nil {
 		return ""
@@ -861,8 +1099,36 @@ func citationQuote(citation *gedcom.SourceCitation) string {
 	return citation.Data.Text
 }
 
+func citationDataURL(citation *gedcom.SourceCitation) string {
+	if citation == nil || citation.Data == nil {
+		return ""
+	}
+	return citation.Data.URL
+}
+
+func citationAncestryID(citation *gedcom.SourceCitation) string {
+	if citation == nil || citation.AncestryAPID == nil {
+		return ""
+	}
+	return citation.AncestryAPID.Raw
+}
+
+func citationAncestryURL(citation *gedcom.SourceCitation) string {
+	if citation == nil || citation.AncestryAPID == nil {
+		return ""
+	}
+	return citation.AncestryAPID.URL()
+}
+
 func citationIdentityKey(identity SourceCitationIdentity) string {
-	parts := []string{identity.SourceXRef, identity.Detail, identity.Quote, identity.Path}
+	parts := []string{
+		identity.SourceXRef,
+		identity.Detail,
+		identity.Quote,
+		identity.DataURL,
+		identity.AncestryID,
+		identity.Path,
+	}
 	return strings.Join(parts, "|")
 }
 

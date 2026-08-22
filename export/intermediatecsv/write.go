@@ -24,6 +24,9 @@ func WriteCSVBundle(model *IntermediateModel, issues []Issue, outputDir string, 
 	if err := writeEvents(filepath.Join(outputDir, "events.csv"), model.Events); err != nil {
 		return err
 	}
+	if err := writeEventDetails(filepath.Join(outputDir, "event_details.csv"), model.EventDetails); err != nil {
+		return err
+	}
 	if options.IncludePlaces {
 		if err := writePlaces(filepath.Join(outputDir, "places.csv"), model.Places); err != nil {
 			return err
@@ -90,6 +93,21 @@ func writeEvents(path string, rows []EventRow) error {
 	return writeCSV(path, []string{"key", "gedcom_xref", "title", "type", "subtype", "when_value", "place_key", "gedcom_path", "raw_date", "raw_place"}, data)
 }
 
+func writeEventDetails(path string, rows []EventDetailRow) error {
+	data := make([][]string, 0, len(rows))
+	for _, row := range rows {
+		data = append(data, []string{
+			row.EventKey,
+			row.Tag,
+			row.Value,
+			row.XRef,
+			strconv.Itoa(row.Seq),
+			row.GedcomPath,
+		})
+	}
+	return writeCSV(path, []string{"event_key", "detail_tag", "detail_value", "detail_xref", "seq", "gedcom_path"}, data)
+}
+
 func writePlaces(path string, rows []PlaceRow) error {
 	data := make([][]string, 0, len(rows))
 	for _, row := range rows {
@@ -144,9 +162,17 @@ func writeSources(path string, rows []SourceRow) error {
 func writeCitations(path string, rows []CitationRow) error {
 	data := make([][]string, 0, len(rows))
 	for _, row := range rows {
-		data = append(data, []string{row.Key, row.SourceKey, row.Detail, row.Quote, row.GedcomPath})
+		data = append(data, []string{
+			row.Key,
+			row.SourceKey,
+			row.Detail,
+			row.Quote,
+			row.DataURL,
+			row.AncestryURL,
+			row.GedcomPath,
+		})
 	}
-	return writeCSV(path, []string{"key", "source_key", "detail", "quote", "gedcom_path"}, data)
+	return writeCSV(path, []string{"key", "source_key", "detail", "quote", "data_url", "ancestry_url", "gedcom_path"}, data)
 }
 
 func writeEntityCitationLinks(path string, rows []EntityCitationLink) error {

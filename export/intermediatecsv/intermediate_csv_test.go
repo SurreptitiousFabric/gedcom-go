@@ -148,6 +148,8 @@ func TestBuildAndWriteIntermediateBundle(t *testing.T) {
 	}
 	assertCSVExists(t, outputDir, "persons.csv", "key,gedcom_xref,title,sex,primary_name,notes_raw")
 	assertCSVExists(t, outputDir, "events.csv", "key,gedcom_xref,title,type,subtype,when_value,place_key,gedcom_path,raw_date,raw_place")
+	assertCSVExists(t, outputDir, "event_details.csv", "event_key,detail_tag,detail_value,detail_xref,seq,gedcom_path")
+	assertCSVExists(t, outputDir, "citations.csv", "key,source_key,detail,quote,data_url,ancestry_url,gedcom_path")
 	assertCSVExists(t, outputDir, "issues.csv", "severity,entity_type,entity_key,gedcom_xref,gedcom_path,issue_code,message,raw_value,suggested_action")
 }
 
@@ -172,6 +174,26 @@ func TestInvalidDateIssue(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("expected INVALID_DATE issue")
+	}
+}
+
+func TestParseNoteDetails(t *testing.T) {
+	note := "Age: 16; Relation to Head of House: Servant; Marital Status: Married; Custom Field: Example"
+	details := parseNoteDetails(note)
+	if len(details) != 4 {
+		t.Fatalf("expected 4 details, got %d", len(details))
+	}
+	if details[0].Tag != "NOTE.AGE" || details[0].Value != "16" {
+		t.Fatalf("unexpected age detail: %+v", details[0])
+	}
+	if details[1].Tag != "NOTE.RELATION_TO_HEAD_OF_HOUSE" || details[1].Value != "Servant" {
+		t.Fatalf("unexpected relation detail: %+v", details[1])
+	}
+	if details[2].Tag != "NOTE.MARITAL_STATUS" || details[2].Value != "Married" {
+		t.Fatalf("unexpected marital status detail: %+v", details[2])
+	}
+	if details[3].Tag != "NOTE.CUSTOM_FIELD" || details[3].Value != "Example" {
+		t.Fatalf("unexpected custom detail: %+v", details[3])
 	}
 }
 

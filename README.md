@@ -183,12 +183,13 @@ encoder.Encode(f, doc)
   - Output files:
     - `persons.csv` - People with GEDCOM xref, primary name, sex, notes
     - `events.csv` - Events and attributes with date/place normalization
+    - `event_details.csv` - Event/attribute detail tags (age, cause, address, notes, etc.)
     - `places.csv` - Place dimension table (when enabled)
     - `groups.csv` - Family/group records (when enabled)
     - `person_event_links.csv` - Person-to-event links with roles
     - `person_parent_links.csv` - Child-to-parent links
     - `group_person_links.csv` - Group membership links (when enabled)
-    - `sources.csv`, `citations.csv`, `entity_citation_links.csv` - Source data (when enabled)
+    - `sources.csv`, `citations.csv`, `entity_citation_links.csv` - Source data with citation URLs (when enabled)
     - `issues.csv` - Import/normalization issues and unresolved pointers
 - **API Documentation**: [pkg.go.dev/github.com/SurreptitiousFabric/gedcom-go](https://pkg.go.dev/github.com/SurreptitiousFabric/gedcom-go)
 - **Contributing**: [CONTRIBUTING.md](CONTRIBUTING.md)

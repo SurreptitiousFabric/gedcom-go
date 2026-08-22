@@ -52,6 +52,9 @@ type SourceCitationData struct {
 
 	// Text is the quoted text from the source
 	Text string
+
+	// URL is a link to the source record (WWW subordinate)
+	URL string
 }
 
 // SourceCitation represents a citation of a source with location and quality information.
